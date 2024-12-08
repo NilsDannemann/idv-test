@@ -1,0 +1,28 @@
+---
+import ThemeToggle from '@/components/ThemeToggle.astro'
+import { buttonVariants } from '@/components/ui/button'
+---
+
+<header
+  class="sticky top-0 z-50 w-full bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60"
+>
+  <div
+    class="container flex h-16 items-center space-x-4 sm:justify-between sm:space-x-0"
+  >
+    <div class="flex gap-6 md:gap-10">
+      <a href="/" class="flex items-center space-x-2">
+        <span class="inline-block font-bold">intrinsify Deals Viewer</span>
+      </a>
+    </div>
+    <div class="flex flex-1 items-center justify-end space-x-4">
+      <nav class="flex items-center space-x-1">
+        <ThemeToggle />
+        <form action="/api/logout" method="POST">
+          <button type="submit" class={buttonVariants({ variant: "ghost", size: "sm" })}>
+            Logout
+          </button>
+        </form>
+      </nav>
+    </div>
+  </div>
+</header>

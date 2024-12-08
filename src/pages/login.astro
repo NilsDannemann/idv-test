@@ -1,0 +1,68 @@
+---
+import BaseLayout from '@/layouts/BaseLayout.astro'
+import { buttonVariants } from '@/components/ui/button'
+
+// Check if already logged in
+const sessionPassword = Astro.cookies.get('session-pw')?.value
+if (sessionPassword === import.meta.env.PROJECT_PASSWORD) {
+  return Astro.redirect('/')
+}
+
+// Handle form submission
+let error = false
+if (Astro.request.method === 'POST') {
+  try {
+    const data = await Astro.request.formData()
+    const password = data.get('password')
+
+    if (password === import.meta.env.PROJECT_PASSWORD) {
+      Astro.cookies.set('session-pw', password.toString(), {
+        path: '/',
+        httpOnly: true,
+        secure: true,
+        sameSite: 'strict',
+      })
+      return Astro.redirect('/')
+    } else {
+      error = true
+    }
+  } catch (err) {
+    console.error(err)
+    error = true
+  }
+}
+---
+
+<BaseLayout title="Login" description="Please login to continue">
+  <div class="container flex h-[calc(100vh-8rem)] w-full items-center justify-center">
+    <div class="mx-auto flex w-full flex-col justify-center space-y-6 sm:w-[350px]">
+      <div class="flex flex-col space-y-2 text-center">
+        <h1 class="text-2xl font-semibold tracking-tight">Welcome back</h1>
+        <p class="text-sm text-muted-foreground">
+          Enter the project password to continue
+        </p>
+      </div>
+
+      <div class="grid gap-6">
+        <form method="POST">
+          <div class="grid gap-2">
+            <div class="grid gap-1">
+              <input
+                id="password"
+                name="password"
+                type="password"
+                autocomplete="current-password"
+                class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                required
+              />
+            </div>
+            {error && (
+              <p class="text-sm text-red-500">Invalid password</p>
+            )}
+            <button type="submit" class={buttonVariants()}>Login</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</BaseLayout> 

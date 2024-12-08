@@ -1,0 +1,226 @@
+---
+import DeepDiveDealsChart from "./DeepDiveDealsChart.astro";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+
+interface DealGroup {
+  id: string;
+  title: string;
+}
+
+interface Deal {
+  id: string;
+  title: string;
+  cdate: string; // Date created
+}
+
+const API_KEY = import.meta.env.ACTIVECAMPAIGN_API_KEY;
+const ACCOUNT_URL = import.meta.env.ACTIVECAMPAIGN_ACCOUNT_URL;
+
+if (!API_KEY || !ACCOUNT_URL) {
+  throw new Error('ActiveCampaign API key or account URL is missing');
+}
+
+async function fetchDealGroups(): Promise<DealGroup[]> {
+  try {
+    const response = await fetch(`${ACCOUNT_URL}/api/3/dealGroups`, {
+      method: 'GET',
+      headers: {
+        'Api-Token': API_KEY,
+        'Accept': 'application/json'
+      },
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    if (!data.dealGroups || !Array.isArray(data.dealGroups)) {
+      console.error('Unexpected API response structure:', data);
+      return [];
+    }
+    
+    return data.dealGroups.map((dealGroup: any) => ({
+      id: dealGroup.id,
+      title: dealGroup.title,
+    }));
+  } catch (error) {
+    console.error('Error fetching deal groups:', error);
+    return [];
+  }
+}
+
+async function fetchDeals(pipelineId: string): Promise<Deal[]> {
+  let allDeals: Deal[] = [];
+  let offset = 0;
+  const limit = 100; // Adjust as needed
+
+  function truncateName(name: string, maxLength: number = 15): string {
+    return name.length > maxLength ? name.slice(0, maxLength) + '...' : name;
+  }
+
+  while (true) {
+    try {
+      const response = await fetch(`${ACCOUNT_URL}/api/3/deals?filters[pipeline]=${pipelineId}&limit=${limit}&offset=${offset}`, {
+        method: 'GET',
+        headers: {
+          'Api-Token': API_KEY,
+          'Accept': 'application/json'
+        },
+      });
+    
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+    
+      const data = await response.json();
+    
+      if (!data.deals || !Array.isArray(data.deals)) {
+        console.error('Unexpected API response structure:', data);
+        break;
+      }
+    
+      const deals = data.deals.map((deal: any) => {
+        const titleParts = deal.title.split(' - ');
+        if (titleParts.length > 1) {
+          titleParts[1] = truncateName(titleParts[1]);
+          deal.title = titleParts.join(' - ');
+        }
+        return {
+          id: deal.id,
+          title: deal.title,
+          cdate: deal.cdate,
+        };
+      });
+
+      allDeals = allDeals.concat(deals);
+
+      if (deals.length < limit) {
+        break; // No more deals to fetch
+      }
+
+      offset += limit;
+    } catch (error) {
+      console.error('Error fetching deals:', error);
+      break;
+    }
+  }
+ 
+  return allDeals;
+}
+
+const dealGroups = await fetchDealGroups();
+const miniprodukteDealGroup = dealGroups.find(dg => dg.title.toLowerCase() === 'miniprodukte');
+let deals: Deal[] = [];
+let errorMessage = '';
+
+if (dealGroups.length === 0) {
+  errorMessage = 'No deal groups (pipelines) found. You may need to create a pipeline in your ActiveCampaign account or check your account permissions.';
+} else if (!miniprodukteDealGroup) {
+  errorMessage = 'The "Miniprodukte" pipeline was not found.';
+} else {
+  deals = await fetchDeals(miniprodukteDealGroup.id);
+  // Filter deals to only include those with "[DD" in the title
+  deals = deals.filter(deal => deal.title.includes('[DD'));
+  // Sort deals by date, newest first
+  deals.sort((a, b) => new Date(b.cdate).getTime() - new Date(a.cdate).getTime());
+}
+
+function formatDate(dateString: string): string {
+  const date = new Date(dateString);
+  return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+function parseTitle(title: string) {
+  const priceRegex = /für (\d+),- €/;
+  const idRegex = /(\d{6}-\d{6}-\d)$/;  // Matches the ID pattern at the end of the string
+
+  const priceMatch = title.match(priceRegex);
+  const idMatch = title.match(idRegex);
+
+  const price = priceMatch ? priceMatch[1] + '€' : '';
+  const id = idMatch ? idMatch[1] : '';
+
+  // Remove the price and ID from the title for further processing
+  let remainingTitle = title.replace(priceRegex, '').replace(idRegex, '').trim();
+
+  const parts = remainingTitle.split(' - ');
+  const type = parts[0].trim();
+  const name = parts[1] ? parts[1].trim() : '';
+  
+  // Join the remaining parts as the description
+  const description = parts.slice(2).join(' - ')
+    .replace(/^»|«$/g, '')  // Remove opening and closing quotes
+    .replace(/[-•]\s*$/, '')  // Remove trailing dash or bullet point
+    .replace(/«\s*$/, '')  // Remove any remaining closing quote at the end
+    .trim();
+
+  return { type, name, description, price, id };
+}
+---
+
+<div class="space-y-8">
+  {errorMessage ? (
+    <p class="text-red-500 dark:text-red-400">{errorMessage}</p>
+  ) : deals.length > 0 ? (
+    <>
+
+      <DeepDiveDealsChart deals={deals} />
+
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Type</TableHead>
+            <TableHead>Name</TableHead>
+            <TableHead>Description</TableHead>
+            <TableHead>Price</TableHead>
+            <TableHead>Date</TableHead>
+            <TableHead>ID</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {deals.map((deal) => {
+            const { type, name, description, price, id } = parseTitle(deal.title);
+            return (
+              <TableRow key={deal.id}>
+                <TableCell>{type}</TableCell>
+                <TableCell>{name}</TableCell>
+                <TableCell>{description}</TableCell>
+                <TableCell>{price}</TableCell>
+                <TableCell>{formatDate(deal.cdate)}</TableCell>
+                <TableCell>{id}</TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </>
+  ) : (
+    <p class="text-foreground dark:text-foreground">No Deep Dive deals found in the Miniprodukte pipeline.</p>
+  )}
+</div>
+
+<script>
+  const table = document.querySelector('table');
+
+  document.addEventListener('filterchange', (event) => {
+    const selectedFilter = event.detail.filter;
+    
+    // Filter table rows
+    const rows = table.querySelectorAll('tbody tr');
+    rows.forEach((row) => {
+      const type = row.querySelector('td:first-child').textContent;
+      if (selectedFilter === 'all' || type.includes(selectedFilter)) {
+        row.style.display = '';
+      } else {
+        row.style.display = 'none';
+      }
+    });
+
+    // Update chart
+    if (window.updateDeepDiveChart) {
+      window.updateDeepDiveChart(selectedFilter);
+    }
+  });
+</script>

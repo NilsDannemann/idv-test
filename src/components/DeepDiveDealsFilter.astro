@@ -1,0 +1,32 @@
+---
+const options = [
+  { value: "all", label: "All Deals" },
+  { value: "[DD1]", label: "DD1" },
+  { value: "[DD2]", label: "DD2" },
+  { value: "[DD3]", label: "DD3" },
+  { value: "[DD4]", label: "DD4" },
+  { value: "[DD5]", label: "DD5" },
+  { value: "DD-BUNDLE", label: "DD Bundle" },
+  { value: "PREMIUM-PASS", label: "Premium Pass" },
+];
+---
+
+<div class="mb-4">
+  <select id="filter" class="block pl-3 pr-10 py-2 text-base border focus:outline-none focus:ring-primary focus:border-primary sm:text-sm rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+    {options.map((option) => (
+      <option value={option.value}>{option.label}</option>
+    ))}
+  </select>
+</div>
+
+<script>
+  const filterSelect = document.getElementById('filter');
+  
+  filterSelect.addEventListener('change', (event) => {
+    const selectedFilter = event.target.value;
+    
+    // Dispatch a custom event for both chart and table filtering
+    const filterEvent = new CustomEvent('filterchange', { detail: { filter: selectedFilter } });
+    document.dispatchEvent(filterEvent);
+  });
+</script>

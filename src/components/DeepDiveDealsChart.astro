@@ -1,0 +1,277 @@
+---
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import DeepDiveDealsFilter from "./DeepDiveDealsFilter.astro";
+
+interface Deal {
+  id: string;
+  title: string;
+  cdate: string;
+}
+
+interface ChartProps {
+  deals: Deal[];
+}
+
+const { deals } = Astro.props as ChartProps;
+
+function processChartData(deals: Deal[], filter: string = 'all') {
+  const filteredDeals = filter === 'all' 
+    ? deals 
+    : deals.filter(deal => deal.title.includes(filter));
+  
+  const processedData = filteredDeals.reduce((acc, deal) => {
+    const date = new Date(deal.cdate).toISOString().split('T')[0];
+    acc[date] = (acc[date] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  return Object.entries(processedData)
+    .map(([date, count]) => ({ date, deals: count }))
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    .slice(-25);
+}
+
+let chartData = processChartData(deals);
+
+const totalDeals = deals.length;
+
+// Calculate totals for DD1 through DD5, DD-BUNDLE, and PREMIUM-PASS
+const ddTotals = deals.reduce((acc, deal) => {
+  for (let i = 1; i <= 5; i++) {
+    if (deal.title.includes(`[DD${i}]`)) {
+      acc[`DD${i}`] = (acc[`DD${i}`] || 0) + 1;
+    }
+  }
+  if (deal.title.includes('DD-BUNDLE')) {
+    acc['DD-BUNDLE'] = (acc['DD-BUNDLE'] || 0) + 1;
+  }
+  if (deal.title.includes('PREMIUM-PASS')) {
+    acc['PREMIUM-PASS'] = (acc['PREMIUM-PASS'] || 0) + 1;
+  }
+  return acc;
+}, {} as Record<string, number>);
+
+// Format date for display
+const formatDate = (dateString: string) => {
+  const date = new Date(dateString);
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
+---
+
+<Card class="w-full">
+  <CardHeader class="flex flex-col items-stretch space-y-4 border-b p-4 sm:p-6">
+    <div class="flex justify-between items-start px-2 sm:px-4 pt-2 sm:pt-3">
+      <div class="space-y-2">
+        <CardTitle>DeepDive Deals</CardTitle>
+        <CardDescription>
+          Deals created over time (last <u>25 days</u>)
+        </CardDescription>
+      </div>
+      <div class="ml-4">
+        <DeepDiveDealsFilter />
+      </div>
+    </div>
+    <div class="grid gap-3 px-2 sm:px-4 pt-2 sm:pt-3">
+      <div class="bg-muted rounded-lg p-4">
+        <div class="flex justify-between items-center">
+          <span class="text-sm font-medium text-muted-foreground">Total Deals</span>
+          <span class="text-2xl font-bold">{totalDeals}</span>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
+        <div class="bg-muted rounded-lg px-3 py-2 sm:px-4 sm:py-3">
+          <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center">
+            <span class="text-xs sm:text-sm font-medium text-muted-foreground">DD Bundle</span>
+            <span class="text-base sm:text-sm font-bold" data-dd-total="bundle">{ddTotals['DD-BUNDLE'] || 0}</span>
+          </div>
+        </div>
+        <div class="bg-muted rounded-lg px-3 py-2 sm:px-4 sm:py-3">
+          <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center">
+            <span class="text-xs sm:text-sm font-medium text-muted-foreground">Premium Pass</span>
+            <span class="text-base sm:text-sm font-bold" data-dd-total="premium">{ddTotals['PREMIUM-PASS'] || 0}</span>
+          </div>
+        </div>
+        {[1, 2, 3, 4, 5].map((num) => (
+          <div class="bg-muted rounded-lg px-3 py-2 sm:px-4 sm:py-3">
+            <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center">
+              <span class="text-xs sm:text-sm font-medium text-muted-foreground">DD{num}</span>
+              <span class="text-base sm:text-sm font-bold" data-dd-total={num}>{ddTotals[`DD${num}`] || 0}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  </CardHeader>
+  <CardContent>
+    <div class="-m-6 aspect-[4/1] w-[calc(100%+3rem)]">
+      <svg width="100%" height="100%" viewBox="0 0 1200 300" id="deepDiveChart">
+        <!-- X-axis -->
+        <line x1="60" y1="250" x2="1140" y2="250" stroke="currentColor" stroke-width="1" />
+        
+        <!-- Bars -->
+        {chartData.map((item, index) => {
+          const chartWidth = 1080; // Reduced width to add padding on both sides
+          const barHeight = (item.deals / Math.max(...chartData.map(d => d.deals))) * 200;
+          const barWidth = (chartWidth / chartData.length) * 0.8;
+          const spacing = (chartWidth / chartData.length) * 0.2;
+          const x = 60 + index * (chartWidth / chartData.length) + spacing / 2; // Adjusted x calculation
+          const y = 250 - barHeight;
+          const radius = 4;
+          return (
+            <g>
+              <path 
+                d={`M ${x},250 
+                     L ${x},${y + radius} 
+                     Q ${x},${y} ${x + radius},${y}
+                     L ${x + barWidth - radius},${y}
+                     Q ${x + barWidth},${y} ${x + barWidth},${y + radius}
+                     L ${x + barWidth},250 
+                     Z`}
+                class="fill-primary dark:fill-primary"
+              />
+              <text 
+                x={x + (barWidth / 2)} 
+                y={245 - barHeight} 
+                text-anchor="middle" 
+                font-size="12"
+                class="fill-current text-foreground dark:text-foreground"
+              >
+                {item.deals}
+              </text>
+              <text 
+                x={x + (barWidth / 2)} 
+                y="270" 
+                text-anchor="middle" 
+                font-size="10"
+                class="fill-current text-muted-foreground dark:text-muted-foreground"
+              >
+                {formatDate(item.date)}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  </CardContent>
+</Card>
+
+<script>
+  // This script will run on the client side
+  const dealsData = JSON.parse(document.getElementById('dealsData').textContent);
+
+  function processChartData(deals, filter = 'all') {
+    const filteredDeals = filter === 'all' 
+      ? deals 
+      : deals.filter(deal => deal.title.includes(filter));
+    
+    const processedData = filteredDeals.reduce((acc, deal) => {
+      const date = new Date(deal.cdate).toISOString().split('T')[0];
+      acc[date] = (acc[date] || 0) + 1;
+      return acc;
+    }, {});
+
+    return Object.entries(processedData)
+      .map(([date, count]) => ({ date, deals: count }))
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .slice(-25);
+  }
+
+  function formatDate(dateString) {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+
+  function updateChart(filter) {
+    const chartData = processChartData(dealsData, filter);
+    const svg = document.getElementById('deepDiveChart');
+    
+    // Clear existing bars
+    svg.querySelectorAll('g').forEach(g => g.remove());
+
+    // Redraw bars
+    const maxDeals = Math.max(...chartData.map(d => d.deals));
+    const chartWidth = 1040; // Reduced width to add padding on sides
+    chartData.forEach((item, index) => {
+      const barHeight = (item.deals / maxDeals) * 200;
+      const barWidth = (chartWidth / chartData.length) * 0.8; // Increased bar width
+      const spacing = (chartWidth / chartData.length) * 0.2; // Reduced spacing
+      const x = 50 + (index * (chartWidth / chartData.length)) + spacing; // Added left padding
+      const y = 250 - barHeight;
+      const radius = 4;
+
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', `M ${x},250 
+                               L ${x},${y + radius} 
+                               Q ${x},${y} ${x + radius},${y}
+                               L ${x + barWidth - radius},${y}
+                               Q ${x + barWidth},${y} ${x + barWidth},${y + radius}
+                               L ${x + barWidth},250 
+                               Z`);
+      path.setAttribute('class', 'fill-primary dark:fill-primary');
+
+      const dealText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      dealText.setAttribute('x', x + (barWidth / 2));
+      dealText.setAttribute('y', 245 - barHeight);
+      dealText.setAttribute('text-anchor', 'middle');
+      dealText.setAttribute('font-size', '12');
+      dealText.setAttribute('class', 'fill-current text-foreground dark:text-foreground');
+      dealText.textContent = item.deals;
+
+      const dateText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      dateText.setAttribute('x', x + (barWidth / 2));
+      dateText.setAttribute('y', '270');
+      dateText.setAttribute('text-anchor', 'middle');
+      dateText.setAttribute('font-size', '10');
+      dateText.setAttribute('class', 'fill-current text-muted-foreground dark:text-muted-foreground');
+      dateText.textContent = formatDate(item.date);
+
+      const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      g.appendChild(path);
+      g.appendChild(dealText);
+      g.appendChild(dateText);
+      svg.appendChild(g);
+    });
+
+    // Update totals
+    const totalDeals = chartData.reduce((sum, item) => sum + item.deals, 0);
+    document.querySelector('.text-lg.font-bold.leading-none.sm\\:text-3xl').textContent = totalDeals;
+
+    const ddTotals = dealsData.reduce((acc, deal) => {
+      for (let i = 1; i <= 5; i++) {
+        if (deal.title.includes(`[DD${i}]`) && (filter === 'all' || deal.title.includes(filter))) {
+          acc[`DD${i}`] = (acc[`DD${i}`] || 0) + 1;
+        }
+      }
+      if (deal.title.includes('DD-BUNDLE') && (filter === 'all' || filter === 'DD-BUNDLE')) {
+        acc['DD-BUNDLE'] = (acc['DD-BUNDLE'] || 0) + 1;
+      }
+      if (deal.title.includes('PREMIUM-PASS') && (filter === 'all' || filter === 'PREMIUM-PASS')) {
+        acc['PREMIUM-PASS'] = (acc['PREMIUM-PASS'] || 0) + 1;
+      }
+      return acc;
+    }, {});
+
+    for (let i = 1; i <= 5; i++) {
+      const ddTotalElement = document.querySelector(`[data-dd-total="${i}"]`);
+      if (ddTotalElement) {
+        ddTotalElement.textContent = ddTotals[`DD${i}`] || 0;
+      }
+    }
+
+    const bundleTotalElement = document.querySelector('[data-dd-total="bundle"]');
+    if (bundleTotalElement) {
+      bundleTotalElement.textContent = ddTotals['DD-BUNDLE'] || 0;
+    }
+
+    const premiumTotalElement = document.querySelector('[data-dd-total="premium"]');
+    if (premiumTotalElement) {
+      premiumTotalElement.textContent = ddTotals['PREMIUM-PASS'] || 0;
+    }
+  }
+
+  // Expose the updateChart function to the global scope
+  window.updateDeepDiveChart = updateChart;
+</script>
+
+<!-- Hidden element to pass deals data to client-side script -->
+<div id="dealsData" style="display: none;">{JSON.stringify(deals)}</div>
